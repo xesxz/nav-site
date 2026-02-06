@@ -105,6 +105,20 @@ function Header({
   searchTerm: string;
   setSearchTerm: (v: string) => void;
 }) {
+  const [user, setUser] = useState<{ username: string } | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("user");
+    if (stored) {
+      setUser(JSON.parse(stored));
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    setUser(null);
+  };
+
   return (
     <header className="sticky top-0 z-50 backdrop-blur-xl bg-slate-900/70 border-b border-slate-700/50">
       <div className="w-full max-w-7xl mx-auto px-6 py-5">
@@ -123,6 +137,29 @@ function Header({
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-12 pr-4 py-3 rounded-xl bg-slate-800/80 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
             />
+          </div>
+          <div className="flex items-center gap-3">
+            {user ? (
+              <>
+                <span className="text-slate-400 text-sm">{user.username}</span>
+                <a href="/notes" className="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm transition-colors">
+                  便签
+                </a>
+                <a href="/add" className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm transition-colors">
+                  添加
+                </a>
+                <button
+                  onClick={handleLogout}
+                  className="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition-colors"
+                >
+                  退出
+                </button>
+              </>
+            ) : (
+              <a href="/login" className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm transition-colors">
+                登录
+              </a>
+            )}
           </div>
         </div>
       </div>
