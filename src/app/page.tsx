@@ -177,7 +177,7 @@ function CategoryNav({
   setActiveCategory: (v: string | null) => void;
 }) {
   return (
-    <nav className="sticky top-[81px] z-40 backdrop-blur-xl bg-slate-900/60 border-b border-slate-700/30">
+    <nav className="sticky top-[31px] z-40 backdrop-blur-xl bg-slate-900/60 border-b border-slate-700/30">
       <div className="w-full max-w-7xl mx-auto px-6 py-4">
         <div className="flex flex-wrap gap-2">
           <button
