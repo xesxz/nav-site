@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 
 interface Star {
   id: number;
-  content: string;
+  name: string;
 }
 
 export default function StarPage() {

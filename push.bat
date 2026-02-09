@@ -13,3 +13,5 @@ git push
 
 :: Output result
 echo Auto commit by shell script
+
+
