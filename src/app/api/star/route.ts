@@ -17,11 +17,12 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const { name } = await request.json();
+    console.log('name =>', name);
     if (!name?.trim()) {
       return NextResponse.json({ error: "内容不能为空" }, { status: 400 });
     }
     const [result] = await pool.query<ResultSetHeader>(
-      "INSERT INTO star (name) VALUES (?)",
+      "INSERT INTO star (name, created_at) VALUES (?, NOW())",
       [name.trim()]
     );
     return NextResponse.json({ success: true, id: result.insertId });

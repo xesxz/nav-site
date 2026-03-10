@@ -40,7 +40,7 @@ export default function StarPage() {
       const res = await fetch("/api/star", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: newContent }),
+        body: JSON.stringify({ name: newContent }),
       });
       if ((await res.json()).success) {
         setNewContent("");
