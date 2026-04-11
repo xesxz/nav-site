@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>基金对比走势</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0d1117; font-family: 'Microsoft YaHei', sans-serif; color: #e6edf3; }
+
+  #top { padding: 20px 28px 14px; border-bottom: 1px solid #21262d; }
+  #top h1 { margin: 0 0 4px; font-size: 20px; color: #d2a8ff; }
+  #top .subtitle { font-size: 12px; color: #6e7681; margin-bottom: 14px; }
+
+  /* API Key */
+  #apikey-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  #apikey-row label { font-size: 12px; color: #8b949e; white-space: nowrap; }
+  #apikey-row input {
+    background: #161b22; border: 1px solid #30363d; color: #e6edf3;
+    padding: 6px 10px; border-radius: 6px; font-size: 12px; outline: none;
+    width: 320px; font-family: monospace;
+  }
+  #apikey-row input:focus { border-color: #d2a8ff; }
+
+  /* 全局设置 */
+  #global-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  #global-bar select, #global-bar input {
+    background: #161b22; border: 1px solid #30363d; color: #e6edf3;
+    padding: 7px 10px; border-radius: 6px; font-size: 13px; outline: none; cursor: pointer;
+  }
+  #global-bar label { font-size: 13px; color: #8b949e; }
+  #global-bar .mode-toggle {
+    display: flex; background: #161b22; border: 1px solid #30363d; border-radius: 6px; overflow: hidden;
+  }
+  #global-bar .mode-toggle button {
+    background: none; border: none; color: #8b949e; padding: 7px 14px; font-size: 13px;
+    cursor: pointer; font-family: inherit; transition: background 0.15s, color 0.15s;
+  }
+  #global-bar .mode-toggle button.active { background: #d2a8ff; color: #0d1117; font-weight: bold; }
+
+  /* 基金列表 */
+  #fund-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .fund-row {
+    display: flex; align-items: center; gap: 8px; background: #161b22;
+    border: 1px solid #30363d; border-radius: 8px; padding: 8px 12px;
+    transition: border-color 0.15s;
+  }
+  .fund-row:hover { border-color: #444c56; }
+  .color-dot {
+    width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 2px solid #0d1117;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.15);
+  }
+  .fund-row input[type=text] {
+    flex: 1; background: transparent; border: none; color: #e6edf3;
+    font-size: 14px; outline: none; min-width: 0;
+  }
+  .fund-row input[type=text]::placeholder { color: #484f58; }
+  .fund-name-tag {
+    font-size: 12px; color: #8b949e; white-space: nowrap; max-width: 200px;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .fund-stat-inline { font-size: 12px; color: #6e7681; white-space: nowrap; }
+  .remove-btn {
+    background: none; border: none; color: #484f58; font-size: 16px; cursor: pointer;
+    padding: 0 2px; line-height: 1; transition: color 0.15s;
+  }
+  .remove-btn:hover { color: #f85149; }
+
+  #add-fund-row { display: flex; gap: 8px; }
+  #add-input {
+    flex: 1; background: #161b22; border: 1px solid #30363d; color: #e6edf3;
+    padding: 8px 12px; border-radius: 6px; font-size: 14px; outline: none; max-width: 320px;
+  }
+  #add-input:focus { border-color: #d2a8ff; }
+  .btn-purple {
+    background: #6e40c9; color: #fff; border: none; padding: 8px 18px;
+    border-radius: 6px; font-size: 14px; cursor: pointer; font-family: inherit;
+    transition: background 0.2s; white-space: nowrap;
+  }
+  .btn-purple:hover { background: #d2a8ff; color: #0d1117; }
+  .btn-purple:disabled { background: #30363d; color: #8b949e; cursor: not-allowed; }
+  .btn-ghost {
+    background: none; border: 1px solid #30363d; color: #8b949e; padding: 8px 14px;
+    border-radius: 6px; font-size: 13px; cursor: pointer; font-family: inherit;
+    transition: border-color 0.15s, color 0.15s; white-space: nowrap;
+  }
+  .btn-ghost:hover { border-color: #d2a8ff; color: #d2a8ff; }
+
+  #status { padding: 6px 0 0; font-size: 13px; color: #8b949e; min-height: 24px; }
+  #status.error { color: #f85149; }
+  #status.ok { color: #3fb950; }
+
+  /* 图表区 */
+  #chart-wrap { padding: 8px; }
+  #chart { width: 100%; height: 480px; }
+  #empty { text-align: center; padding: 80px 0; color: #484f58; font-size: 15px; }
+
+  /* 对比表格 */
+  #compare-table-wrap { padding: 0 8px 20px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #161b22; color: #8b949e; padding: 8px 12px; text-align: center; border-bottom: 1px solid #21262d; white-space: nowrap; }
+  td { padding: 8px 12px; text-align: center; border-bottom: 1px solid #21262d; }
+  tr:last-child td { border-bottom: none; }
+  .td-name { text-align: left; display: flex; align-items: center; gap: 7px; }
+
+  /* 历史 */
+  #history { font-size: 12px; color: #8b949e; margin-bottom: 6px; }
+  .hist-tag {
+    display: inline-block; background: #161b22; border: 1px solid #30363d;
+    border-radius: 4px; padding: 2px 8px; margin: 2px 3px 2px 0; cursor: pointer;
+    font-size: 12px; color: #8b949e; transition: border-color 0.15s;
+  }
+  .hist-tag:hover { border-color: #d2a8ff; color: #d2a8ff; }
+</style>
+</head>
+<body>
+
+<div id="top">
+  <h1>基金走势对比</h1>
+  <div class="subtitle">同时对比多只基金净值走势，支持绝对净值 / 收益率归一化两种模式</div>
+
+  <div id="apikey-row">
+    <label>API Key：</label>
+    <input id="apikey-input" type="password"  value="mkt_H2j_QdF0Zjyt6kiMfqM1olpDVy3-NJNQ9jArf93XzSk" placeholder="填入东方财富妙想 API Key（mkt_...）" />
+  </div>
+
+  <div id="global-bar">
+    <label>时间范围：</label>
+    <select id="period-select">
+      <option value="近一年">近1年</option>
+      <option value="近三年" selected>近3年</option>
+      <option value="近五年">近5年</option>
+    </select>
+    <label style="margin-left:8px">粒度：</label>
+    <select id="freq-select">
+      <option value="月度">月线</option>
+      <option value="周度">周线</option>
+    </select>
+    <label style="margin-left:8px">对比模式：</label>
+    <div class="mode-toggle">
+      <button id="mode-nav" class="active" onclick="setMode('nav')">单位净值</button>
+      <button id="mode-ret" onclick="setMode('return')">收益率 %</button>
+    </div>
+    <button class="btn-ghost" onclick="doQueryAll()" id="refresh-btn">刷新全部</button>
+    <button class="btn-ghost" onclick="clearAll()">清空</button>
+  </div>
+
+  <div id="fund-list"></div>
+
+  <div id="add-fund-row">
+    <input id="add-input" type="text" placeholder="输入基金名称或代码，回车添加" />
+    <button class="btn-purple" id="add-btn" onclick="addFund()">+ 添加基金</button>
+  </div>
+
+  <div id="history" style="margin-top:8px"><span>历史：</span><span id="hist-tags"></span></div>
+  <div id="status"></div>
+</div>
+
+<div id="chart-wrap">
+  <div id="empty">添加基金后点击刷新全部</div>
+  <div id="chart" style="display:none"></div>
+</div>
+<div id="compare-table-wrap"></div>
+
+<script>
+// ── 颜色池 ──────────────────────────────────────────────
+var COLORS = ['#d2a8ff','#79c0ff','#56d364','#ffa657','#f85149','#ff7b72','#a5d6ff','#ffa8a8','#b3f0b3','#ffe0a0'];
+
+// ── 状态 ────────────────────────────────────────────────
+var funds = [];       // [{id, query, color, name, dates, values, loading, error}]
+var mode = 'nav';     // 'nav' | 'return'
+var chartInstance = null;
+var historyList = JSON.parse(localStorage.getItem('fund_cmp_history') || '[]');
+
+// ── 初始化 ──────────────────────────────────────────────
+var savedKey = localStorage.getItem('mx_apikey') || '';
+if (savedKey) document.getElementById('apikey-input').value = savedKey;
+
+document.getElementById('add-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') addFund();
+});
+
+renderHistory();
+renderFundList();
+
+// ── 模式切换 ─────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-nav').className = m === 'nav' ? 'active' : '';
+  document.getElementById('mode-ret').className = m === 'return' ? 'active' : '';
+  renderChart();
+  renderTable();
+}
+
+// ── 添加基金 ─────────────────────────────────────────────
+function addFund() {
+  var q = document.getElementById('add-input').value.trim();
+  if (!q) return;
+  if (funds.length >= COLORS.length) { setStatus('最多同时对比 ' + COLORS.length + ' 只基金', 'error'); return; }
+  var id = Date.now();
+  funds.push({ id: id, query: q, color: COLORS[funds.length], name: q, dates: null, values: null, loading: false, error: null });
+  document.getElementById('add-input').value = '';
+  renderFundList();
+  fetchFund(funds[funds.length - 1]);
+}
+
+function removeFund(id) {
+  funds = funds.filter(function(f) { return f.id !== id; });
+  renderFundList();
+  renderChart();
+  renderTable();
+}
+
+function clearAll() {
+  funds = [];
+  renderFundList();
+  renderChart();
+  renderTable();
+  document.getElementById('compare-table-wrap').innerHTML = '';
+}
+
+// ── 渲染基金标签列表 ──────────────────────────────────────
+function renderFundList() {
+  var el = document.getElementById('fund-list');
+  if (!funds.length) { el.innerHTML = ''; return; }
+  el.innerHTML = funds.map(function(f) {
+    var pct = '';
+    var pctColor = '#8b949e';
+    if (f.values && f.values.length > 1) {
+      var r = (f.values[f.values.length-1] - f.values[0]) / f.values[0] * 100;
+      pct = (r >= 0 ? '+' : '') + r.toFixed(2) + '%';
+      pctColor = r >= 0 ? '#3fb950' : '#f85149';
+    }
+    var statusTxt = f.loading ? '查询中...' : (f.error ? '⚠ ' + f.error : (f.values ? f.dates.length + '条数据' : ''));
+    return '<div class="fund-row" id="row-' + f.id + '">' +
+      '<div class="color-dot" style="background:' + f.color + '"></div>' +
+      '<input type="text" value="' + escHtml(f.query) + '" placeholder="基金名称/代码" ' +
+        'onchange="updateQuery(' + f.id + ', this.value)" />' +
+      '<span class="fund-name-tag" title="' + escHtml(f.name) + '">' + escHtml(f.name !== f.query ? f.name : '') + '</span>' +
+      '<span class="fund-stat-inline" style="color:' + pctColor + '">' + pct + '</span>' +
+      '<span class="fund-stat-inline" style="color:#484f58">' + statusTxt + '</span>' +
+      '<button class="remove-btn" onclick="removeFund(' + f.id + ')" title="移除">×</button>' +
+    '</div>';
+  }).join('');
+}
+
+function updateQuery(id, val) {
+  var f = funds.find(function(x) { return x.id === id; });
+  if (f) { f.query = val.trim(); f.name = val.trim(); f.values = null; f.dates = null; f.error = null; }
+}
+
+// ── 查询单只基金 ──────────────────────────────────────────
+function fetchFund(f) {
+  var apikey = document.getElementById('apikey-input').value.trim();
+  if (!apikey) { setStatus('请填入 API Key', 'error'); return; }
+  localStorage.setItem('mx_apikey', apikey);
+
+  var period = document.getElementById('period-select').value;
+  var freq = document.getElementById('freq-select').value;
+  var query = 'fund ' + f.query + ' ' + freq + ' nav ' + period;
+
+  f.loading = true; f.error = null;
+  renderFundList();
+
+  fetch('https://mkapi2.dfcfs.com/finskillshub/api/claw/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': apikey },
+    body: JSON.stringify({ toolQuery: query })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(res) {
+    f.loading = false;
+    if (!res.success) { f.error = res.message || '查询失败'; renderFundList(); return; }
+    var list = res.data && res.data.data && res.data.data.searchDataResultDTO &&
+               res.data.data.searchDataResultDTO.dataTableDTOList;
+    if (!list || !list.length) { f.error = '无数据'; renderFundList(); return; }
+    var table = list[0];
+    var raw = table.rawTable;
+    var key = table.indicatorOrder && table.indicatorOrder[0];
+    if (!key || !raw[key]) { f.error = '数据格式异常'; renderFundList(); return; }
+    f.name = (table.entityTagDTO && table.entityTagDTO.shortName) || table.entityName || f.query;
+    f.dates = raw.headName.slice().reverse();
+    f.values = raw[key].map(Number).reverse();
+    f.fundType = (table.entityTagDTO && table.entityTagDTO.className) || '';
+    addHistory(f.query);
+    renderFundList();
+    renderChart();
+    renderTable();
+  })
+  .catch(function(err) {
+    f.loading = false; f.error = err.message;
+    renderFundList();
+  });
+}
+
+// ── 刷新全部 ──────────────────────────────────────────────
+function doQueryAll() {
+  var apikey = document.getElementById('apikey-input').value.trim();
+  if (!apikey) { setStatus('请填入 API Key', 'error'); return; }
+  if (!funds.length) { setStatus('请先添加基金', 'error'); return; }
+  funds.forEach(function(f) { fetchFund(f); });
+}
+
+// ── 渲染图表 ──────────────────────────────────────────────
+function renderChart() {
+  var ready = funds.filter(function(f) { return f.values && f.values.length > 0; });
+  if (!ready.length) {
+    document.getElementById('empty').style.display = 'block';
+    document.getElementById('chart').style.display = 'none';
+    return;
+  }
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('chart').style.display = 'block';
+
+  if (!chartInstance) {
+    chartInstance = echarts.init(document.getElementById('chart'));
+    window.addEventListener('resize', function() { chartInstance.resize(); });
+  }
+
+  // 构建 series
+  var series = ready.map(function(f) {
+    var data;
+    if (mode === 'return') {
+      var base = f.values[0];
+      data = f.values.map(function(v) { return +((v - base) / base * 100).toFixed(4); });
+    } else {
+      data = f.values.map(function(v) { return +v.toFixed(4); });
+    }
+    // 把 dates+data 配对，用于 tooltip 跨系列对齐
+    var paired = f.dates.map(function(d, i) { return [d, data[i]]; });
+    return {
+      name: f.name,
+      type: 'line',
+      data: paired,
+      smooth: 0.3,
+      symbol: 'circle',
+      symbolSize: 5,
+      lineStyle: { color: f.color, width: 2.5 },
+      itemStyle: { color: f.color, borderWidth: 1.5, borderColor: '#0d1117' },
+      emphasis: { itemStyle: { symbolSize: 9 } }
+    };
+  });
+
+  var yFormatter = mode === 'return'
+    ? function(v) { return (v >= 0 ? '+' : '') + v.toFixed(2) + '%'; }
+    : function(v) { return v; };
+
+  chartInstance.setOption({
+    backgroundColor: '#0d1117',
+    legend: {
+      data: ready.map(function(f) { return f.name; }),
+      top: 8, textStyle: { color: '#c9d1d9', fontSize: 12 },
+      icon: 'circle', itemWidth: 10, itemHeight: 10
+    },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: '#161b22', borderColor: '#30363d',
+      textStyle: { color: '#e6edf3', fontSize: 12 },
+      formatter: function(params) {
+        var s = '<b>' + params[0].value[0] + '</b><br/>';
+        params.forEach(function(p) {
+          var val = p.value[1];
+          var txt = mode === 'return'
+            ? (val >= 0 ? '+' : '') + val.toFixed(2) + '%'
+            : val.toFixed(4);
+          s += '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' +
+               p.color + ';margin-right:6px"></span>' + p.seriesName + '：<b>' + txt + '</b><br/>';
+        });
+        return s;
+      }
+    },
+    grid: { left: '7%', right: '4%', top: '13%', bottom: '16%' },
+    xAxis: {
+      type: 'time',
+      axisLine: { lineStyle: { color: '#30363d' } },
+      axisLabel: { color: '#8b949e', fontSize: 10 },
+      splitLine: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      name: mode === 'return' ? '收益率（%）' : '单位净值',
+      nameTextStyle: { color: '#8b949e', fontSize: 12 },
+      axisLine: { show: false }, axisTick: { show: false },
+      axisLabel: { color: '#8b949e', formatter: yFormatter },
+      splitLine: { lineStyle: { color: '#21262d' } },
+      // 收益率模式加 0 基准线
+      min: mode === 'return' ? undefined : function(v) { return (v.min * 0.97).toFixed(3) * 1; }
+    },
+    dataZoom: [
+      { type: 'inside', start: 0, end: 100 },
+      {
+        type: 'slider', start: 0, end: 100, bottom: 6,
+        borderColor: '#30363d', fillerColor: 'rgba(210,168,255,0.12)',
+        handleStyle: { color: '#d2a8ff' }, textStyle: { color: '#8b949e' }, height: 18
+      }
+    ],
+    series: series
+  }, true);
+
+  // 收益率模式加 0 基准线
+  if (mode === 'return') {
+    chartInstance.setOption({
+      series: series.concat([{
+        name: '__zero__', type: 'line', silent: true, legendHoverLink: false,
+        data: [], markLine: {
+          silent: true, symbol: 'none',
+          data: [{ yAxis: 0 }],
+          lineStyle: { color: '#444c56', type: 'dashed', width: 1 },
+          label: { show: false }
+        }
+      }])
+    });
+  }
+}
+
+// ── 渲染对比表格 ───────────────────────────────────────────
+function renderTable() {
+  var ready = funds.filter(function(f) { return f.values && f.values.length > 0; });
+  var wrap = document.getElementById('compare-table-wrap');
+  if (!ready.length) { wrap.innerHTML = ''; return; }
+
+  var rows = ready.map(function(f) {
+    var vs = f.values;
+    var max = Math.max.apply(null, vs);
+    var min = Math.min.apply(null, vs);
+    var latest = vs[vs.length - 1];
+    var first = vs[0];
+    var ret = ((latest - first) / first * 100).toFixed(2);
+    var retColor = ret >= 0 ? '#3fb950' : '#f85149';
+    var retSign = ret >= 0 ? '+' : '';
+    var maxDd = maxDrawdown(vs);
+    var avg = (vs.reduce(function(a,b){return a+b;},0)/vs.length).toFixed(4);
+    return '<tr>' +
+      '<td><div class="td-name">' +
+        '<div class="color-dot" style="background:' + f.color + '"></div>' +
+        '<span>' + escHtml(f.name) + '</span>' +
+      '</div></td>' +
+      '<td>' + latest.toFixed(4) + '</td>' +
+      '<td style="color:' + retColor + '">' + retSign + ret + '%</td>' +
+      '<td style="color:#3fb950">' + max.toFixed(4) + '</td>' +
+      '<td style="color:#f85149">' + min.toFixed(4) + '</td>' +
+      '<td>' + avg + '</td>' +
+      '<td style="color:#f85149">' + maxDd + '%</td>' +
+      '<td>' + f.dates.length + '期</td>' +
+    '</tr>';
+  }).join('');
+
+  wrap.innerHTML = '<table>' +
+    '<thead><tr>' +
+      '<th style="text-align:left">基金</th>' +
+      '<th>最新净值</th><th>区间涨跌</th>' +
+      '<th>最高净值</th><th>最低净值</th>' +
+      '<th>均值</th><th>最大回撤</th><th>数据期数</th>' +
+    '</tr></thead>' +
+    '<tbody>' + rows + '</tbody>' +
+  '</table>';
+}
+
+function maxDrawdown(vs) {
+  var maxDD = 0, peak = vs[0];
+  for (var i = 1; i < vs.length; i++) {
+    if (vs[i] > peak) peak = vs[i];
+    var dd = (peak - vs[i]) / peak * 100;
+    if (dd > maxDD) maxDD = dd;
+  }
+  return maxDD.toFixed(2);
+}
+
+// ── 历史 ─────────────────────────────────────────────────
+function addHistory(name) {
+  historyList = [name].concat(historyList.filter(function(h) { return h !== name; }));
+  if (historyList.length > 20) historyList = historyList.slice(0, 20);
+  localStorage.setItem('fund_cmp_history', JSON.stringify(historyList));
+  renderHistory();
+}
+
+function renderHistory() {
+  document.getElementById('hist-tags').innerHTML = historyList.slice(0, 10).map(function(h) {
+    return '<span class="hist-tag" onclick="quickAdd(\'' + escHtml(h) + '\')">' + escHtml(h) + '</span>';
+  }).join('');
+}
+
+function quickAdd(name) {
+  document.getElementById('add-input').value = name;
+  addFund();
+}
+
+// ── 状态 / 工具 ───────────────────────────────────────────
+function setStatus(msg, type) {
+  var el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type || '';
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>股价走势查询</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0d1117; font-family: 'Microsoft YaHei', sans-serif; color: #e6edf3; }
+
+  #top { padding: 24px 32px 16px; border-bottom: 1px solid #21262d; }
+  #top h1 { margin: 0 0 16px; font-size: 20px; color: #58a6ff; }
+
+  #search-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #search-bar input, #search-bar select {
+    background: #161b22; border: 1px solid #30363d; color: #e6edf3;
+    padding: 8px 12px; border-radius: 6px; font-size: 14px; outline: none;
+  }
+  #search-bar input { width: 220px; }
+  #search-bar input:focus { border-color: #58a6ff; }
+  #search-bar select { cursor: pointer; }
+  #search-bar button {
+    background: #1f6feb; color: #fff; border: none; padding: 8px 20px;
+    border-radius: 6px; font-size: 14px; cursor: pointer; font-family: inherit;
+    transition: background 0.2s;
+  }
+  #search-bar button:hover { background: #388bfd; }
+  #search-bar button:disabled { background: #30363d; color: #8b949e; cursor: not-allowed; }
+
+  #apikey-row { margin-top: 10px; display: flex; align-items: center; gap: 8px; }
+  #apikey-row label { font-size: 12px; color: #8b949e; white-space: nowrap; }
+  #apikey-row input {
+    background: #161b22; border: 1px solid #30363d; color: #e6edf3;
+    padding: 6px 10px; border-radius: 6px; font-size: 12px; outline: none; width: 340px;
+    font-family: monospace;
+  }
+  #apikey-row input:focus { border-color: #58a6ff; }
+
+  #status { padding: 8px 32px; font-size: 13px; color: #8b949e; min-height: 28px; }
+  #status.error { color: #f85149; }
+  #status.ok { color: #3fb950; }
+
+  #stats { display: flex; justify-content: center; gap: 40px; padding: 12px 32px 0; flex-wrap: wrap; }
+  .stat { text-align: center; min-width: 90px; }
+  .stat-label { font-size: 12px; color: #8b949e; }
+  .stat-val { font-size: 20px; font-weight: bold; margin: 3px 0 2px; }
+  .stat-sub { font-size: 11px; color: #6e7681; }
+
+  #chart-wrap { padding: 0 8px; }
+  #chart { width: 100%; height: 500px; }
+
+  #empty { text-align: center; padding: 80px 0; color: #484f58; font-size: 15px; display: block; }
+
+  #history { padding: 6px 32px 0; font-size: 12px; color: #8b949e; }
+  #history span { margin-right: 6px; }
+  .hist-tag {
+    display: inline-block; background: #161b22; border: 1px solid #30363d;
+    border-radius: 4px; padding: 2px 8px; margin: 2px 4px 2px 0; cursor: pointer; font-size: 12px;
+    color: #8b949e; transition: border-color 0.15s;
+  }
+  .hist-tag:hover { border-color: #58a6ff; color: #58a6ff; }
+</style>
+</head>
+<body>
+
+<div id="top">
+  <h1>股价走势查询工具</h1>
+  <div id="search-bar">
+    <input id="stock-input" type="text" placeholder="输入股票名称或代码，如：东方财富、贵州茅台" />
+    <select id="period-select">
+      <option value="近一年">近1年</option>
+      <option value="近三年" selected>近3年</option>
+      <option value="近五年">近5年</option>
+    </select>
+    <select id="freq-select">
+      <option value="月度">月线</option>
+      <option value="周度">周线</option>
+      <option value="日度">日线</option>
+    </select>
+    <button id="query-btn" onclick="doQuery()">查询</button>
+  </div>
+  <div id="apikey-row">
+    <label>API Key：</label>
+    <input id="apikey-input" type="password" value="mkt_H2j_QdF0Zjyt6kiMfqM1olpDVy3-NJNQ9jArf93XzSk"  placeholder="填入东方财富妙想 API Key（mkt_...）" />
+  </div>
+</div>
+
+<div id="history"><span>历史查询：</span><span id="hist-tags"></span></div>
+<div id="status"></div>
+<div id="stats" style="display:none"></div>
+<div id="chart-wrap">
+  <div id="empty">输入股票名称后点击查询</div>
+  <div id="chart" style="display:none"></div>
+</div>
+
+<script>
+var chartInstance = null;
+var currentPrices = [];
+var historyList = JSON.parse(localStorage.getItem('stock_history') || '[]');
+
+// 初始化 apikey
+var savedKey = localStorage.getItem('mx_apikey') || '';
+if (savedKey) document.getElementById('apikey-input').value = savedKey;
+renderHistory();
+
+document.getElementById('stock-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doQuery();
+});
+
+function setStatus(msg, type) {
+  var el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type || '';
+}
+
+function renderHistory() {
+  var tags = document.getElementById('hist-tags');
+  tags.innerHTML = historyList.slice(0, 8).map(function(h) {
+    return '<span class="hist-tag" onclick="fillAndQuery(\'' + h + '\')">' + h + '</span>';
+  }).join('');
+}
+
+function fillAndQuery(name) {
+  document.getElementById('stock-input').value = name;
+  doQuery();
+}
+
+function addHistory(name) {
+  historyList = [name].concat(historyList.filter(function(h) { return h !== name; }));
+  if (historyList.length > 20) historyList = historyList.slice(0, 20);
+  localStorage.setItem('stock_history', JSON.stringify(historyList));
+  renderHistory();
+}
+
+function doQuery() {
+  var stock = document.getElementById('stock-input').value.trim();
+  var period = document.getElementById('period-select').value;
+  var freq = document.getElementById('freq-select').value;
+  var apikey = document.getElementById('apikey-input').value.trim();
+
+  if (!stock) { setStatus('请输入股票名称或代码', 'error'); return; }
+  if (!apikey) { setStatus('请填入 API Key', 'error'); return; }
+
+  localStorage.setItem('mx_apikey', apikey);
+
+  var query = stock + freq + '收盘价' + period;
+  setStatus('查询中...', '');
+  document.getElementById('query-btn').disabled = true;
+
+  fetch('https://mkapi2.dfcfs.com/finskillshub/api/claw/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': apikey },
+    body: JSON.stringify({ toolQuery: query })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(res) {
+    document.getElementById('query-btn').disabled = false;
+    if (!res.success) {
+      setStatus('查询失败：' + (res.message || '未知错误'), 'error');
+      return;
+    }
+    var list = res.data && res.data.data && res.data.data.searchDataResultDTO &&
+               res.data.data.searchDataResultDTO.dataTableDTOList;
+    if (!list || !list.length) {
+      setStatus('未找到相关数据，请尝试其他名称', 'error');
+      return;
+    }
+    var table = list[0];
+    var raw = table.rawTable;
+    var fieldKey = table.indicatorOrder && table.indicatorOrder[0];
+    if (!fieldKey || !raw[fieldKey]) {
+      setStatus('数据格式异常', 'error');
+      return;
+    }
+    var headNames = raw.headName;
+    var rawPrices = raw[fieldKey];
+    // 数据是从新到旧，翻转为时间正序
+    var dates = headNames.slice().reverse();
+    var prices = rawPrices.map(Number).reverse();
+
+    var entityName = table.entityName || stock;
+    var title = table.title || (entityName + ' 股价走势');
+    setStatus(title + '  共 ' + prices.length + ' 条数据', 'ok');
+    addHistory(stock);
+    renderStats(dates, prices, entityName, period);
+    renderChart(dates, prices, title);
+  })
+  .catch(function(err) {
+    document.getElementById('query-btn').disabled = false;
+    setStatus('请求失败，请检查网络或 API Key：' + err.message, 'error');
+  });
+}
+
+function renderStats(dates, prices, name, period) {
+  var maxVal = Math.max.apply(null, prices);
+  var minVal = Math.min.apply(null, prices);
+  var maxIdx = prices.indexOf(maxVal);
+  var minIdx = prices.indexOf(minVal);
+  var latest = prices[prices.length - 1];
+  var first = prices[0];
+  var pct = ((latest - first) / first * 100).toFixed(2);
+  var pctColor = pct >= 0 ? '#3fb950' : '#f85149';
+  var pctSign = pct >= 0 ? '+' : '';
+
+  var avg = (prices.reduce(function(a, b) { return a + b; }, 0) / prices.length).toFixed(2);
+
+  document.getElementById('stats').style.display = 'flex';
+  document.getElementById('stats').innerHTML =
+    stat('区间最高', maxVal.toFixed(2) + ' 元', '#3fb950', dates[maxIdx]?.substring(0,7)) +
+    stat('区间最低', minVal.toFixed(2) + ' 元', '#f85149', dates[minIdx]?.substring(0,7)) +
+    stat('最新价格', latest.toFixed(2) + ' 元', '#58a6ff', dates[dates.length-1]?.substring(0,10)) +
+    stat('区间均价', avg + ' 元', '#d29922', period) +
+    stat('区间涨幅', pctSign + pct + '%', pctColor, '起始 ' + first.toFixed(2) + '元');
+}
+
+function stat(label, val, color, sub) {
+  return '<div class="stat"><div class="stat-label">' + label + '</div>' +
+         '<div class="stat-val" style="color:' + color + '">' + val + '</div>' +
+         '<div class="stat-sub">' + sub + '</div></div>';
+}
+
+function renderChart(dates, prices, title) {
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('chart').style.display = 'block';
+
+  if (!chartInstance) {
+    chartInstance = echarts.init(document.getElementById('chart'));
+    window.addEventListener('resize', function() { chartInstance.resize(); });
+  }
+
+  chartInstance.setOption({
+    backgroundColor: '#0d1117',
+    title: {
+      text: title,
+      left: 'center',
+      top: 8,
+      textStyle: { color: '#c9d1d9', fontSize: 15, fontWeight: 'normal' }
+    },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: '#161b22',
+      borderColor: '#30363d',
+      textStyle: { color: '#e6edf3' },
+      formatter: function(params) {
+        var p = params[0];
+        var i = p.dataIndex;
+        var change = i > 0 ? (prices[i] - prices[i-1]).toFixed(2) : null;
+        var pct = i > 0 ? ((prices[i] - prices[i-1]) / prices[i-1] * 100).toFixed(2) : null;
+        var color = change >= 0 ? '#3fb950' : '#f85149';
+        var sign = change >= 0 ? '+' : '';
+        return '<b>' + p.name + '</b><br/>收盘价：<b style="color:#58a6ff">' + p.value + ' 元</b>' +
+               (change !== null ? '<br/>环比：<span style="color:' + color + '">' + sign + change + ' (' + sign + pct + '%)</span>' : '');
+      }
+    },
+    grid: { left: '6%', right: '4%', top: '12%', bottom: '18%' },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      axisLine: { lineStyle: { color: '#30363d' } },
+      axisLabel: { color: '#8b949e', rotate: 45, fontSize: 10, interval: Math.max(0, Math.floor(dates.length / 18)) },
+      axisTick: { lineStyle: { color: '#30363d' } }
+    },
+    yAxis: {
+      type: 'value',
+      name: '价格（元）',
+      nameTextStyle: { color: '#8b949e', fontSize: 12 },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: '#8b949e', formatter: '{value}' },
+      splitLine: { lineStyle: { color: '#21262d' } },
+      min: function(v) { return Math.floor(v.min * 0.98); }
+    },
+    dataZoom: [
+      { type: 'inside', start: 0, end: 100 },
+      {
+        type: 'slider', start: 0, end: 100, bottom: 8,
+        borderColor: '#30363d', fillerColor: 'rgba(88,166,255,0.1)',
+        handleStyle: { color: '#58a6ff' }, textStyle: { color: '#8b949e' }, height: 20
+      }
+    ],
+    series: [{
+      name: '收盘价',
+      type: 'line',
+      data: prices,
+      smooth: 0.3,
+      symbol: 'circle',
+      symbolSize: dates.length > 60 ? 4 : 7,
+      lineStyle: { color: '#58a6ff', width: 2.5 },
+      itemStyle: { color: '#58a6ff', borderWidth: 2, borderColor: '#0d1117' },
+      emphasis: { itemStyle: { color: '#79c0ff', symbolSize: 10 } },
+      areaStyle: {
+        color: {
+          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(88,166,255,0.35)' },
+            { offset: 1, color: 'rgba(88,166,255,0.02)' }
+          ]
+        }
+      },
+      markPoint: {
+        data: [
+          { type: 'max', name: '最高', label: { color: '#fff', fontSize: 11, fontWeight: 'bold' }, itemStyle: { color: '#3fb950' } },
+          { type: 'min', name: '最低', label: { color: '#fff', fontSize: 11, fontWeight: 'bold' }, itemStyle: { color: '#f85149' } }
+        ],
+        symbolSize: 52, symbol: 'pin'
+      },
+      markLine: {
+        silent: true,
+        data: [{ type: 'average', name: '均值' }],
+        lineStyle: { color: '#d29922', type: 'dashed', width: 1.5 },
+        label: { color: '#d29922', formatter: '均值 {c}元', position: 'end' }
+      }
+    }]
+  }, true);
+}
+</script>
+</body>
+</html>
